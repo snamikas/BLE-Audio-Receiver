@@ -445,6 +445,8 @@
                 <div class="controls">
                     <button id="connectBtn" class="btn">🔍 Connect to BLE Device</button>
                     <button id="disconnectBtn" class="btn btn-danger" disabled>❌ Disconnect</button>
+                    
+                    <button id="scanAny">2️⃣ Scan Any BLE Device</button>
                 </div>
                 <div id="deviceInfo" class="device-info" style="display: none;">
                     <!-- Device info will be populated here -->
@@ -650,6 +652,7 @@
                 document.getElementById('muteBtn').addEventListener('click', () => this.toggleMute());
                 document.getElementById('clearLogBtn').addEventListener('click', () => this.clearLog());
                 document.getElementById('exportLogBtn').addEventListener('click', () => this.exportLog());
+                document.getElementById('scanAny').onclick = () => this.scanAnyDevice();
                 
                 document.getElementById('volumeSlider').addEventListener('input', (e) => {
                     const volume = e.target.value / 100;
@@ -702,6 +705,46 @@
                     this.log(`Connection failed: ${error.message}`, 'error');
                     this.updateConnectionStatus(false);
                     this.showNotification('Failed to connect to BLE device', 'error');
+                }
+            }
+
+            async scanAnyDevice() {
+                this.log('Scanning for ANY BLE device...');
+                this.updateStatus('Scanning for devices...', 'info');
+                
+                try {
+                    this.device = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: [
+                            'battery_service',
+                            'device_information',
+                            'generic_access',
+                            'generic_attribute',
+                            '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
+                        ]
+                    });
+                    
+                    this.updateStatus(`✅ Found device: ${this.device.name || 'Unknown'}`, 'success');
+                    this.log(`✅ Device found: ${this.device.name || 'Unknown'}`);
+                    this.log(`   Device ID: ${this.device.id}`);
+                    this.log(`   Connected: ${this.device.gatt.connected}`);
+                    
+                    document.getElementById('connect').disabled = false;
+                    
+                } catch (error) {
+                    this.updateStatus(`❌ Scan failed: ${error.message}`, 'error');
+                    this.log(`❌ Scan failed: ${error.name} - ${error.message}`);
+                    
+                    if (error.name === 'NotFoundError') {
+                        this.log('💡 No devices found or user cancelled');
+                        this.log('   • Make sure BLE device is on and advertising');
+                        this.log('   • Check if device is in pairing mode');
+                        this.log('   • Try moving closer to device');
+                    } else if (error.name === 'SecurityError') {
+                        this.log('💡 Security error - check HTTPS and permissions');
+                    } else if (error.name === 'NotSupportedError') {
+                        this.log('💡 Web Bluetooth not supported');
+                    }
                 }
             }
             
