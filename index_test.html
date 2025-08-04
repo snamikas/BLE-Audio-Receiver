@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple BLE Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔵 Simple BLE Connection Test</h1>
+        
+        <div id="status" class="status info">
+            Ready to test BLE connection
+        </div>
+        
+        <div>
+            <button id="testWebBluetooth">1️⃣ Test Web Bluetooth Support</button>
+            <button id="scanAny">2️⃣ Scan Any BLE Device</button>
+            <button id="scanAudio">3️⃣ Scan Audio Devices</button>
+            <button id="connect" disabled>4️⃣ Connect to Selected Device</button>
+            <button id="disconnect" disabled>❌ Disconnect</button>
+        </div>
+        
+        <div>
+            <button id="clearLog">🗑️ Clear Log</button>
+        </div>
+        
+        <div id="log" class="log">
+            [System] Simple BLE Test initialized<br>
+        </div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px;">
+            <strong>📋 Checklist:</strong><br>
+            ✅ Using HTTPS (or localhost with Chrome flags)<br>
+            ✅ Using Chrome, Edge, or Opera browser<br>
+            ✅ Bluetooth enabled on computer<br>
+            ✅ BLE device powered on and advertising<br>
+        </div>
+    </div>
+
+    <script>
+        class SimpleBLETest {
+            constructor() {
+                this.device = null;
+                this.server = null;
+                
+                this.setupEvents();
+                this.log('Initializing BLE test...');
+            }
+            
+            setupEvents() {
+                document.getElementById('testWebBluetooth').onclick = () => this.testWebBluetoothSupport();
+                document.getElementById('scanAny').onclick = () => this.scanAnyDevice();
+                document.getElementById('scanAudio').onclick = () => this.scanAudioDevices();
+                document.getElementById('connect').onclick = () => this.connectToDevice();
+                document.getElementById('disconnect').onclick = () => this.disconnectDevice();
+                document.getElementById('clearLog').onclick = () => this.clearLog();
+            }
+            
+            updateStatus(message, type = 'info') {
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = message;
+                statusEl.className = `status ${type}`;
+            }
+            
+            log(message) {
+                const logEl = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                logEl.innerHTML += `[${timestamp}] ${message}<br>`;
+                logEl.scrollTop = logEl.scrollHeight;
+                console.log(`[BLE Test] ${message}`);
+            }
+            
+            testWebBluetoothSupport() {
+                this.log('Testing Web Bluetooth support...');
+                
+                // Check if Web Bluetooth is available
+                if (!navigator.bluetooth) {
+                    this.updateStatus('❌ Web Bluetooth NOT supported', 'error');
+                    this.log('❌ navigator.bluetooth is undefined');
+                    this.log('Solution: Use Chrome, Edge, or Opera browser');
+                    return;
+                }
+                
+                // Check secure context (HTTPS)
+                if (!window.isSecureContext) {
+                    this.updateStatus('❌ Requires HTTPS', 'error');
+                    this.log('❌ Not a secure context (need HTTPS)');
+                    this.log('Solution: Deploy to HTTPS or use localhost with Chrome flags');
+                    return;
+                }
+                
+                // Check user agent
+                const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+                const isEdge = /Edg/.test(navigator.userAgent);
+                const isOpera = /OPR/.test(navigator.userAgent);
+                
+                if (isChrome || isEdge || isOpera) {
+                    this.updateStatus('✅ Web Bluetooth supported!', 'success');
+                    this.log('✅ Web Bluetooth API available');
+                    this.log('✅ Secure context (HTTPS)');
+                    this.log('✅ Compatible browser detected');
+                } else {
+                    this.updateStatus('⚠️ Browser may not support Web Bluetooth', 'error');
+                    this.log('⚠️ Browser compatibility uncertain');
+                    this.log('Recommended: Chrome, Edge, or Opera');
+                }
+            }
+            
+            async scanAnyDevice() {
+                this.log('Scanning for ANY BLE device...');
+                this.updateStatus('Scanning for devices...', 'info');
+                
+                try {
+                    this.device = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: [
+                            'battery_service',
+                            'device_information',
+                            'generic_access',
+                            'generic_attribute',
+                            '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
+                        ]
+                    });
+                    
+                    this.updateStatus(`✅ Found device: ${this.device.name || 'Unknown'}`, 'success');
+                    this.log(`✅ Device found: ${this.device.name || 'Unknown'}`);
+                    this.log(`   Device ID: ${this.device.id}`);
+                    this.log(`   Connected: ${this.device.gatt.connected}`);
+                    
+                    document.getElementById('connect').disabled = false;
+                    
+                } catch (error) {
+                    this.updateStatus(`❌ Scan failed: ${error.message}`, 'error');
+                    this.log(`❌ Scan failed: ${error.name} - ${error.message}`);
+                    
+                    if (error.name === 'NotFoundError') {
+                        this.log('💡 No devices found or user cancelled');
+                        this.log('   • Make sure BLE device is on and advertising');
+                        this.log('   • Check if device is in pairing mode');
+                        this.log('   • Try moving closer to device');
+                    } else if (error.name === 'SecurityError') {
+                        this.log('💡 Security error - check HTTPS and permissions');
+                    } else if (error.name === 'NotSupportedError') {
+                        this.log('💡 Web Bluetooth not supported');
+                    }
+                }
+            }
+            
+            async scanAudioDevices() {
+                this.log('Scanning for audio devices...');
+                this.updateStatus('Scanning for audio devices...', 'info');
+                
+                try {
+                    this.device = await navigator.bluetooth.requestDevice({
+                        filters: [
+                            { services: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] },
+                            { namePrefix: 'ESP32' },
+                            { namePrefix: 'Arduino' },
+                            { namePrefix: 'Audio' },
+                            { namePrefix: 'BLE' },
+                            { namePrefix: 'Nordic' }
+                        ],
+                        optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
+                    });
+                    
+                    this.updateStatus(`✅ Audio device found: ${this.device.name || 'Unknown'}`, 'success');
+                    this.log(`✅ Audio device found: ${this.device.name || 'Unknown'}`);
+                    this.log(`   Device ID: ${this.device.id}`);
+                    
+                    document.getElementById('connect').disabled = false;
+                    
+                } catch (error) {
+                    this.updateStatus(`❌ No audio devices found`, 'error');
+                    this.log(`❌ Audio device scan failed: ${error.name} - ${error.message}`);
+                    
+                    if (error.name === 'NotFoundError') {
+                        this.log('💡 No audio devices found');
+                        this.log('   • Make sure your device advertises service: 6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+                        this.log('   • Or try "Scan Any Device" to see all available devices');
+                        this.log('   • Check device name prefix (ESP32, Arduino, Audio, BLE)');
+                    }
+                }
+            }
+            
+            async connectToDevice() {
+                if (!this.device) {
+                    this.log('❌ No device selected');
+                    return;
+                }
+                
+                this.log(`Connecting to ${this.device.name || 'Unknown'}...`);
+                this.updateStatus('Connecting...', 'info');
+                
+                try {
+                    this.server = await this.device.gatt.connect();
+                    
+                    this.updateStatus(`✅ Connected to ${this.device.name || 'Unknown'}`, 'success');
+                    this.log(`✅ Connected successfully!`);
+                    this.log(`   Server connected: ${this.server.connected}`);
+                    
+                    document.getElementById('connect').disabled = true;
+                    document.getElementById('disconnect').disabled = false;
+                    
+                    // Try to get services
+                    await this.discoverServices();
+                    
+                } catch (error) {
+                    this.updateStatus(`❌ Connection failed: ${error.message}`, 'error');
+                    this.log(`❌ Connection failed: ${error.name} - ${error.message}`);
+                    
+                    if (error.name === 'NetworkError') {
+                        this.log('💡 Network error - device may be out of range or busy');
+                    } else if (error.name === 'SecurityError') {
+                        this.log('💡 Security error - check device permissions');
+                    }
+                }
+            }
+            
+            async discoverServices() {
+                try {
+                    this.log('Discovering services...');
+                    const services = await this.server.getPrimaryServices();
+                    
+                    this.log(`✅ Found ${services.length} services:`);
+                    
+                    for (const service of services) {
+                        this.log(`   📡 Service: ${service.uuid}`);
+                        
+                        // Check if it's the audio service
+                        if (service.uuid === '6e400001-b5a3-f393-e0a9-e50e24dcca9e') {
+                            this.log('   🎵 This is the audio service!');
+                            await this.discoverCharacteristics(service);
+                        }
+                    }
+                    
+                } catch (error) {
+                    this.log(`❌ Service discovery failed: ${error.message}`);
+                }
+            }
+            
+            async discoverCharacteristics(service) {
+                try {
+                    const characteristics = await service.getCharacteristics();
+                    this.log(`   Found ${characteristics.length} characteristics:`);
+                    
+                    for (const char of characteristics) {
+                        const props = [];
+                        if (char.properties.read) props.push('READ');
+                        if (char.properties.write) props.push('WRITE');
+                        if (char.properties.notify) props.push('NOTIFY');
+                        if (char.properties.indicate) props.push('INDICATE');
+                        
+                        this.log(`     📊 ${char.uuid} (${props.join(', ')})`);
+                        
+                        // Check for audio characteristics
+                        if (char.uuid === '6e400002-b5a3-f393-e0a9-e50e24dcca9e') {
+                            this.log('     🎤 This is the audio TX characteristic!');
+                        }
+                        if (char.uuid === '6e400003-b5a3-f393-e0a9-e50e24dcca9e') {
+                            this.log('     🎧 This is the audio RX characteristic!');
+                        }
+                    }
+                    
+                } catch (error) {
+                    this.log(`❌ Characteristic discovery failed: ${error.message}`);
+                }
+            }
+            
+            async disconnectDevice() {
+                if (this.device && this.device.gatt.connected) {
+                    await this.device.gatt.disconnect();
+                    this.log('Disconnected from device');
+                } else {
+                    this.log('No device connected');
+                }
+                
+                this.device = null;
+                this.server = null;
+                
+                document.getElementById('connect').disabled = true;
+                document.getElementById('disconnect').disabled = true;
+                
+                this.updateStatus('Disconnected', 'info');
+            }
+            
+            clearLog() {
+                document.getElementById('log').innerHTML = '[System] Log cleared<br>';
+            }
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            new SimpleBLETest();
+        });
+    </script>
+</body>
+</html>
