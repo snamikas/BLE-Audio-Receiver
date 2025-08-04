@@ -685,8 +685,7 @@
                     this.service = await this.server.getPrimaryService(this.AUDIO_SERVICE_UUID);
                     
                     // Get characteristics
-                    this.audioCharacteristic = await this.service.getCharacteristic(this.AUDIO_RX_CHARACTERISTIC_UUID);
-                    this.controlCharacteristic = await this.service.getCharacteristic(this.AUDIO_TX_CHARACTERISTIC_UUID);
+                    this.audioCharacteristic = await this.service.getCharacteristic(this.AUDIO_RX_CHARACTERISTIC_UUID);                  
                     
                     // Setup notifications for incoming audio data
                     await this.audioCharacteristic.startNotifications();
