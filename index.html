@@ -256,7 +256,10 @@
                     
                     // Request any BLE device
                     this.device = await navigator.bluetooth.requestDevice({
-                        { namePrefix: 'Audio' }
+                        acceptAllDevices: true,
+                        optionalServices: [
+                            '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
+                        ]
                     });
                     
                     this.log(`Connected to device: ${this.device.name}`);
