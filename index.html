@@ -670,13 +670,9 @@
                     this.log('Scanning for BLE audio devices...');
                     
                     this.device = await navigator.bluetooth.requestDevice({
-                        filters: [
-                            { services: [this.AUDIO_SERVICE_UUID] },
-                            { namePrefix: 'Audio' },
-                            { namePrefix: 'BLE' },
-                            { namePrefix: 'ESP32' }
-                        ],
-                        optionalServices: [this.AUDIO_SERVICE_UUID, 'battery_service', 'device_information']
+                        filters: [                          
+                            { namePrefix: 'Audio BL' }                                                       
+                        ]                       
                     });
                     
                     this.log(`Connecting to ${this.device.name || 'Unknown Device'}...`);
