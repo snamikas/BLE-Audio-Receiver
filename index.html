@@ -145,7 +145,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎵 BLE Audio Receiver</h1>
+        <h1>🎵 Nordic UART Audio Receiver</h1>
         
         <div class="controls">
             <button id="connectBtn" class="button">Connect to BLE Device</button>
@@ -154,7 +154,7 @@
         </div>
         
         <div class="status" id="status">
-            Status: Ready to connect to BLE device
+            Status: Ready to connect to Nordic UART device
         </div>
         
         <div class="audio-controls">
@@ -207,6 +207,9 @@
                 this.visualizerData = null;
                 this.animationId = null;
                 
+                // Nordic UART specific properties
+                this.maxPacketSize = 20; // Nordic UART typical MTU
+                
                 // Audio specifications - Mono channel
                 this.sampleRate = 48000;
                 this.channels = 1; // Mono audio
@@ -254,7 +257,7 @@
                 try {
                     this.updateStatus('Requesting BLE device...');
                     
-                    // Request any BLE device
+                    // Request BLE device with Nordic UART Service
                     this.device = await navigator.bluetooth.requestDevice({
                         acceptAllDevices: true,
                         optionalServices: [
@@ -268,41 +271,21 @@
                     this.server = await this.device.gatt.connect();
                     this.updateStatus('Connected to GATT server');
                     
-                    // Get available services from the connected device
-                    const services = await this.server.getPrimaryServices();
-                    this.log(`Found ${services.length} services on device`);
+                    // Get Nordic UART Service
+                    this.service = await this.server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+                    this.log('Nordic UART Service connected');
                     
-                    // Try to find an audio-related service
-                    let audioService = null;
-                    let audioCharacteristic = null;
+                    // Get Nordic UART RX characteristic (for receiving data from device)
+                    this.characteristic = await this.service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
+                    this.log('Nordic UART RX characteristic found');
                     
-                    for (const service of services) {
-                        this.log(`Checking service: ${service.uuid}`);
-                        try {
-                            const characteristics = await service.getCharacteristics();
-                            for (const char of characteristics) {
-                                this.log(`  - Characteristic: ${char.uuid}, Properties: ${Array.from(char.properties).join(', ')}`);
-                                
-                                // Look for characteristics that support notifications (likely audio data)
-                                if (char.properties.has('notify') || char.properties.has('read')) {
-                                    audioService = service;
-                                    audioCharacteristic = char;
-                                    this.log(`  * Selected as audio characteristic`);
-                                    break;
-                                }
-                            }
-                            if (audioCharacteristic) break;
-                        } catch (e) {
-                            this.log(`  - Could not read characteristics: ${e.message}`);
-                        }
+                    // Also get TX characteristic for sending commands if needed
+                    try {
+                        this.txCharacteristic = await this.service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
+                        this.log('Nordic UART TX characteristic found');
+                    } catch (e) {
+                        this.log('Nordic UART TX characteristic not available');
                     }
-                    
-                    if (!audioCharacteristic) {
-                        throw new Error('No suitable audio characteristic found');
-                    }
-                    
-                    this.service = audioService;
-                    this.characteristic = audioCharacteristic;
                     
                     this.connectBtn.disabled = true;
                     this.startAudioBtn.disabled = false;
@@ -363,8 +346,15 @@
                     // Start visualization
                     this.startVisualization();
                     
-                    // Simulate receiving audio data for demo purposes
-                    this.simulateAudioData();
+                    // Send start command to Nordic UART device
+                    if (this.txCharacteristic) {
+                        const startCommand = new TextEncoder().encode('START_AUDIO');
+                        await this.txCharacteristic.writeValue(startCommand);
+                        this.log('Sent START_AUDIO command to device');
+                    }
+                    
+                    // Simulate receiving audio data for demo purposes (remove in production)
+                    this.simulateNordicUARTData();
                     
                 } catch (error) {
                     this.log(`Audio reception error: ${error.message}`);
@@ -379,17 +369,55 @@
             
             handleAudioData(event) {
                 const data = event.target.value;
-                const opusData = new Uint8Array(data.buffer);
+                const receivedData = new Uint8Array(data.buffer);
                 
                 this.packetsReceived++;
                 this.packetsCounter.textContent = this.packetsReceived;
                 
-                // Decode Opus data (simulated)
-                const decodedAudio = this.decodeOpusData(opusData);
+                this.log(`Received ${receivedData.length} bytes via Nordic UART`);
                 
-                if (decodedAudio) {
-                    this.playAudioData(decodedAudio);
+                // Check if this looks like Opus data (starts with Opus frame header)
+                if (this.isOpusData(receivedData)) {
+                    // Process as Opus audio data
+                    const decodedAudio = this.decodeOpusData(receivedData);
+                    if (decodedAudio) {
+                        this.playAudioData(decodedAudio);
+                    }
+                } else {
+                    // Process as raw audio data or other format
+                    this.log(`Data: ${Array.from(receivedData.slice(0, Math.min(10, receivedData.length))).map(b => b.toString(16).padStart(2, '0')).join(' ')}${receivedData.length > 10 ? '...' : ''}`);
+                    
+                    // Try to interpret as raw audio samples
+                    const audioSamples = this.processRawAudioData(receivedData);
+                    if (audioSamples) {
+                        this.playAudioData(audioSamples);
+                    }
                 }
+            }
+            
+            isOpusData(data) {
+                // Simple Opus frame detection
+                // Opus frames typically start with specific patterns
+                if (data.length < 2) return false;
+                
+                // Check for common Opus frame headers
+                const firstByte = data[0];
+                return (firstByte & 0x80) !== 0; // TOC byte has config bit set
+            }
+            
+            processRawAudioData(data) {
+                // Convert received bytes to audio samples
+                // Assuming 16-bit signed integers (common for audio)
+                const samples = new Float32Array(Math.floor(data.length / 2));
+                
+                for (let i = 0; i < samples.length; i++) {
+                    // Convert 16-bit signed integer to float [-1, 1]
+                    const sample16 = (data[i * 2 + 1] << 8) | data[i * 2]; // Little endian
+                    const signedSample = sample16 > 32767 ? sample16 - 65536 : sample16;
+                    samples[i] = signedSample / 32768.0;
+                }
+                
+                return samples;
             }
             
             decodeOpusData(opusData) {
@@ -430,23 +458,33 @@
                 source.start();
             }
             
-            simulateAudioData() {
+            simulateNordicUARTData() {
                 if (!this.isReceiving) return;
                 
-                // Simulate receiving BLE audio packets
+                // Simulate receiving Nordic UART audio packets
                 setTimeout(() => {
                     if (this.isReceiving && this.characteristic) {
-                        // Create simulated Opus packet
-                        const simulatedPacket = new ArrayBuffer(64);
+                        // Create simulated Nordic UART packet (20 bytes typical)
+                        const simulatedPacket = new ArrayBuffer(this.maxPacketSize);
+                        const view = new Uint8Array(simulatedPacket);
+                        
+                        // Fill with simulated 16-bit audio samples
+                        for (let i = 0; i < view.length; i += 2) {
+                            const sample = Math.sin(2 * Math.PI * 440 * this.packetsReceived * 0.01) * 16384;
+                            const sample16 = Math.floor(sample) + 16384; // Convert to unsigned 16-bit
+                            view[i] = sample16 & 0xFF; // Low byte
+                            view[i + 1] = (sample16 >> 8) & 0xFF; // High byte
+                        }
+                        
                         const event = {
                             target: { value: simulatedPacket }
                         };
                         this.handleAudioData(event);
                         
                         // Continue simulation
-                        this.simulateAudioData();
+                        this.simulateNordicUARTData();
                     }
-                }, 20); // 20ms intervals (50 packets per second)
+                }, 50); // 50ms intervals (20 packets per second)
             }
             
             startVisualization() {
@@ -483,6 +521,17 @@
             
             stopAudioReception() {
                 this.isReceiving = false;
+                
+                // Send stop command to Nordic UART device
+                if (this.txCharacteristic) {
+                    try {
+                        const stopCommand = new TextEncoder().encode('STOP_AUDIO');
+                        this.txCharacteristic.writeValue(stopCommand);
+                        this.log('Sent STOP_AUDIO command to device');
+                    } catch (e) {
+                        this.log(`Error sending stop command: ${e.message}`);
+                    }
+                }
                 
                 if (this.characteristic) {
                     this.characteristic.stopNotifications();
