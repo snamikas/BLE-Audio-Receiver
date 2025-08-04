@@ -272,11 +272,11 @@
                     this.updateStatus('Connected to GATT server');
                     
                     // Get Nordic UART Service
-                    this.service = await this.server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+                    this.service = await this.server.getPrimaryService('6E400001-B5A3-F393-E0A9-E50E24DCCA9E');
                     this.log('Nordic UART Service connected');
                     
                     // Get Nordic UART RX characteristic (for receiving data from device)
-                    this.characteristic = await this.service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
+                    this.characteristic = await this.service.getCharacteristic('6E400002-B5A3-F393-E0A9-E50E24DCCA9E');
                     this.log('Nordic UART RX characteristic found');
                     
                     // Also get TX characteristic for sending commands if needed
