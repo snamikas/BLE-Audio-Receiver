@@ -3,572 +3,815 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BLE Audio Receiver with Opus Codec</title>
+    <title>Opus BLE Audio Decoder</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            color: white;
-        }
-        
-        .container {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-        }
-        
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 2.5em;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        .controls {
             display: flex;
-            flex-direction: column;
-            gap: 20px;
-            margin-bottom: 30px;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
         }
-        
-        .button {
-            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+
+        .app-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 32px;
+            max-width: 600px;
+            width: 100%;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .section {
+            margin-bottom: 24px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dc3545;
+            transition: all 0.3s ease;
+        }
+
+        .status-indicator.connected {
+            background: #28a745;
+            box-shadow: 0 0 8px rgba(40, 167, 69, 0.4);
+        }
+
+        .status-indicator.connecting {
+            background: #ffc107;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            padding: 15px 30px;
-            border-radius: 50px;
+            padding: 12px 24px;
+            border-radius: 8px;
             font-size: 16px;
-            font-weight: bold;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
-        
-        .button:hover {
+
+        .btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
         }
-        
-        .button:disabled {
-            background: #ccc;
+
+        .btn:disabled {
+            opacity: 0.6;
             cursor: not-allowed;
             transform: none;
         }
-        
-        .status {
-            background: rgba(0,0,0,0.2);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-family: monospace;
+
+        .btn-secondary {
+            background: #6c757d;
         }
-        
-        .audio-controls {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-top: 20px;
+
+        .btn-danger {
+            background: #dc3545;
         }
-        
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+        }
+
         .volume-control {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+            margin-top: 16px;
         }
-        
+
         .volume-slider {
-            width: 150px;
-            height: 5px;
-            border-radius: 5px;
-            background: rgba(255,255,255,0.3);
+            flex: 1;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
             outline: none;
-            -webkit-appearance: none;
+            cursor: pointer;
         }
-        
+
         .volume-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
             appearance: none;
             width: 20px;
             height: 20px;
+            background: #667eea;
             border-radius: 50%;
-            background: #4ECDC4;
             cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
-        
-        .logs {
-            background: rgba(0,0,0,0.3);
-            padding: 15px;
-            border-radius: 10px;
-            height: 200px;
-            overflow-y: auto;
-            font-family: monospace;
-            font-size: 12px;
-            margin-top: 20px;
+
+        .volume-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #667eea;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
-        
-        .visualizer {
-            width: 100%;
-            height: 100px;
-            background: rgba(0,0,0,0.2);
-            border-radius: 10px;
-            margin: 20px 0;
-        }
-        
-        .specs {
+
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
         }
-        
-        .spec-item {
-            background: rgba(255,255,255,0.1);
-            padding: 15px;
-            border-radius: 10px;
+
+        .stat-item {
             text-align: center;
+            padding: 16px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
         }
-        
-        .spec-value {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #4ECDC4;
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #f1aeb5;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .success-message {
+            background: #d1edff;
+            color: #0c5460;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #b8daff;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .device-info {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .buffer-indicator {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .buffer-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .latency-indicator {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .latency-good {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .latency-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .latency-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        @media (max-width: 480px) {
+            .app-container {
+                padding: 20px;
+            }
+            
+            .controls-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎵 Nordic UART Audio Receiver</h1>
-        
-        <div class="controls">
-            <button id="connectBtn" class="button">Connect to BLE Device</button>
-            <button id="startAudioBtn" class="button" disabled>Start Audio Reception</button>
-            <button id="stopAudioBtn" class="button" disabled>Stop Audio Reception</button>
+    <div class="app-container">
+        <div class="header">
+            <h1>Opus BLE Audio Decoder</h1>
+            <p>Professional-grade audio streaming from Bluetooth Low Energy devices</p>
         </div>
-        
-        <div class="status" id="status">
-            Status: Ready to connect to Nordic UART device
+
+        <!-- Bluetooth Connection Section -->
+        <div class="section">
+            <div class="section-title">
+                <div class="status-indicator" id="connectionStatus"></div>
+                Bluetooth Connection
+            </div>
+            <div class="controls-grid">
+                <button class="btn" id="connectBtn">
+                    <span>📡</span> Connect Device
+                </button>
+                <button class="btn btn-danger" id="disconnectBtn" disabled>
+                    <span>🔌</span> Disconnect
+                </button>
+            </div>
+            <div class="device-info" id="deviceInfo">
+                <strong>Device:</strong> <span id="deviceName">-</span><br>
+                <strong>Service:</strong> <span id="serviceName">-</span><br>
+                <strong>Signal:</strong> <span id="signalStrength">-</span>
+            </div>
+            <div class="error-message" id="connectionError"></div>
+            <div class="success-message" id="connectionSuccess"></div>
         </div>
-        
-        <div class="audio-controls">
+
+        <!-- Audio Controls Section -->
+        <div class="section">
+            <div class="section-title">
+                🎵 Audio Controls
+            </div>
+            <div class="controls-grid">
+                <button class="btn btn-secondary" id="playBtn" disabled>
+                    <span>▶️</span> Play
+                </button>
+                <button class="btn btn-secondary" id="pauseBtn" disabled>
+                    <span>⏸️</span> Pause
+                </button>
+                <button class="btn btn-secondary" id="muteBtn" disabled>
+                    <span>🔊</span> Mute
+                </button>
+            </div>
             <div class="volume-control">
-                <span>🔊 Volume:</span>
-                <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="50">
-                <span id="volumeValue">50%</span>
+                <span>🔉</span>
+                <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="75" disabled>
+                <span id="volumeLabel">75%</span>
             </div>
         </div>
-        
-        <canvas id="visualizer" class="visualizer"></canvas>
-        
-        <div class="specs">
-            <div class="spec-item">
-                <div>Sample Rate</div>
-                <div class="spec-value" id="sampleRate">48000 Hz</div>
+
+        <!-- Real-time Statistics Section -->
+        <div class="section">
+            <div class="section-title">
+                📊 Real-time Statistics
             </div>
-            <div class="spec-item">
-                <div>Channels</div>
-                <div class="spec-value" id="channels">Mono</div>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="packetCount">0</div>
+                    <div class="stat-label">Packets</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="byteCount">0</div>
+                    <div class="stat-label">Bytes</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="latencyValue">0ms</div>
+                    <div class="stat-label">Latency</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="bufferHealth">0%</div>
+                    <div class="stat-label">Buffer Health</div>
+                </div>
             </div>
-            <div class="spec-item">
-                <div>Latency</div>
-                <div class="spec-value" id="latency">0 ms</div>
-            </div>
-            <div class="spec-item">
-                <div>Packets Received</div>
-                <div class="spec-value" id="packetsReceived">0</div>
+            <div class="buffer-indicator">
+                <div class="buffer-fill" id="bufferFill"></div>
             </div>
         </div>
-        
-        <div class="logs" id="logs"></div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/opusjs/0.1.0/opus.min.js"></script>
     <script>
-        class BLEAudioReceiver {
+        class OpusBluetoothAudioDecoder {
             constructor() {
                 this.device = null;
-                this.server = null;
-                this.service = null;
                 this.characteristic = null;
                 this.audioContext = null;
-                this.opusDecoder = null;
-                this.audioBuffer = [];
-                this.isReceiving = false;
-                this.packetsReceived = 0;
+                this.worker = null;
                 this.gainNode = null;
-                this.analyser = null;
-                this.visualizerData = null;
-                this.animationId = null;
-                
-                // Nordic UART specific properties
-                this.maxPacketSize = 20; // Nordic UART typical MTU
-                
-                // Audio specifications - Mono channel
-                this.sampleRate = 48000;
-                this.channels = 1; // Mono audio
-                this.frameSize = 960; // 20ms at 48kHz
+                this.isConnected = false;
+                this.isPlaying = false;
+                this.isMuted = false;
+                this.volume = 0.75;
+                this.audioQueue = [];
+                this.stats = {
+                    packets: 0,
+                    bytes: 0,
+                    latency: 0,
+                    bufferHealth: 0
+                };
                 
                 this.initializeElements();
                 this.setupEventListeners();
+                this.initializeAudioContext();
+                this.initializeWorker();
             }
-            
+
             initializeElements() {
-                this.connectBtn = document.getElementById('connectBtn');
-                this.startAudioBtn = document.getElementById('startAudioBtn');
-                this.stopAudioBtn = document.getElementById('stopAudioBtn');
-                this.status = document.getElementById('status');
-                this.logs = document.getElementById('logs');
-                this.volumeSlider = document.getElementById('volumeSlider');
-                this.volumeValue = document.getElementById('volumeValue');
-                this.visualizer = document.getElementById('visualizer');
-                this.ctx = this.visualizer.getContext('2d');
-                this.packetsCounter = document.getElementById('packetsReceived');
-                this.latencyDisplay = document.getElementById('latency');
+                this.elements = {
+                    connectionStatus: document.getElementById('connectionStatus'),
+                    connectBtn: document.getElementById('connectBtn'),
+                    disconnectBtn: document.getElementById('disconnectBtn'),
+                    deviceInfo: document.getElementById('deviceInfo'),
+                    deviceName: document.getElementById('deviceName'),
+                    serviceName: document.getElementById('serviceName'),
+                    signalStrength: document.getElementById('signalStrength'),
+                    connectionError: document.getElementById('connectionError'),
+                    connectionSuccess: document.getElementById('connectionSuccess'),
+                    playBtn: document.getElementById('playBtn'),
+                    pauseBtn: document.getElementById('pauseBtn'),
+                    muteBtn: document.getElementById('muteBtn'),
+                    volumeSlider: document.getElementById('volumeSlider'),
+                    volumeLabel: document.getElementById('volumeLabel'),
+                    packetCount: document.getElementById('packetCount'),
+                    byteCount: document.getElementById('byteCount'),
+                    latencyValue: document.getElementById('latencyValue'),
+                    bufferHealth: document.getElementById('bufferHealth'),
+                    bufferFill: document.getElementById('bufferFill')
+                };
             }
-            
+
             setupEventListeners() {
-                this.connectBtn.addEventListener('click', () => this.connectToBLE());
-                this.startAudioBtn.addEventListener('click', () => this.startAudioReception());
-                this.stopAudioBtn.addEventListener('click', () => this.stopAudioReception());
-                this.volumeSlider.addEventListener('input', (e) => this.updateVolume(e.target.value));
-            }
-            
-            log(message) {
-                const timestamp = new Date().toLocaleTimeString();
-                const logEntry = `[${timestamp}] ${message}`;
-                console.log(logEntry);
-                this.logs.innerHTML += logEntry + '\n';
-                this.logs.scrollTop = this.logs.scrollHeight;
-            }
-            
-            updateStatus(message) {
-                this.status.textContent = `Status: ${message}`;
-                this.log(message);
-            }
-            
-            async connectToBLE() {
-                try {
-                    this.updateStatus('Requesting BLE device...');
-                    
-                    // Request BLE device with Nordic UART Service
-                    this.device = await navigator.bluetooth.requestDevice({
-                        acceptAllDevices: true,
-                        optionalServices: [
-                            '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
-                        ]
-                    });
-                    
-                    this.log(`Connected to device: ${this.device.name}`);
-                    
-                    // Connect to GATT server
-                    this.server = await this.device.gatt.connect();
-                    this.updateStatus('Connected to GATT server');
-                    
-                    // Get Nordic UART Service
-                    this.service = await this.server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-                    this.log('Nordic UART Service connected');
-                    
-                    // Get Nordic UART RX characteristic (for receiving data from device)
-                    this.characteristic = await this.service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
-                    this.log('Nordic UART RX characteristic found');
-                    
-                    // Also get TX characteristic for sending commands if needed
-                    try {
-                        this.txCharacteristic = await this.service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
-                        this.log('Nordic UART TX characteristic found');
-                    } catch (e) {
-                        this.log('Nordic UART TX characteristic not available');
+                this.elements.connectBtn.addEventListener('click', () => this.connectToDevice());
+                this.elements.disconnectBtn.addEventListener('click', () => this.disconnectDevice());
+                this.elements.playBtn.addEventListener('click', () => this.playAudio());
+                this.elements.pauseBtn.addEventListener('click', () => this.pauseAudio());
+                this.elements.muteBtn.addEventListener('click', () => this.toggleMute());
+                this.elements.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
+
+                // Handle page unload
+                window.addEventListener('beforeunload', () => {
+                    if (this.isConnected) {
+                        this.disconnectDevice();
                     }
-                    
-                    this.connectBtn.disabled = true;
-                    this.startAudioBtn.disabled = false;
-                    this.updateStatus('Ready to receive audio');
-                    
-                } catch (error) {
-                    this.log(`Connection error: ${error.message}`);
-                    this.updateStatus('Connection failed');
-                }
+                });
+
+                // Handle audio context state changes
+                document.addEventListener('click', () => {
+                    if (this.audioContext && this.audioContext.state === 'suspended') {
+                        this.audioContext.resume();
+                    }
+                }, { once: true });
             }
-            
-            async initializeAudio() {
+
+            async initializeAudioContext() {
                 try {
                     this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                        sampleRate: this.sampleRate
+                        sampleRate: 48000,
+                        latencyHint: 'interactive'
                     });
-                    
-                    // Create gain node for volume control
+
                     this.gainNode = this.audioContext.createGain();
-                    this.gainNode.gain.value = this.volumeSlider.value / 100;
-                    
-                    // Create analyser for visualization
-                    this.analyser = this.audioContext.createAnalyser();
-                    this.analyser.fftSize = 256;
-                    this.visualizerData = new Uint8Array(this.analyser.frequencyBinCount);
-                    
-                    // Connect audio graph
-                    this.gainNode.connect(this.analyser);
-                    this.analyser.connect(this.audioContext.destination);
-                    
-                    this.log('Audio context initialized');
-                    return true;
+                    this.gainNode.connect(this.audioContext.destination);
+                    this.gainNode.gain.value = this.volume;
+
+                    console.log('Audio context initialized:', {
+                        sampleRate: this.audioContext.sampleRate,
+                        state: this.audioContext.state
+                    });
                 } catch (error) {
-                    this.log(`Audio initialization error: ${error.message}`);
-                    return false;
+                    this.showError('Failed to initialize audio context: ' + error.message);
                 }
             }
-            
-            async startAudioReception() {
+
+            async initializeWorker() {
                 try {
-                    if (!await this.initializeAudio()) {
-                        return;
+                    this.worker = new Worker('opus-decoder-worker.js');
+                    
+                    this.worker.onmessage = (event) => {
+                        const { type, data, error } = event.data;
+                        
+                        switch (type) {
+                            case 'decoded':
+                                this.handleDecodedAudio(data);
+                                break;
+                            case 'error':
+                                this.showError('Decoder error: ' + error);
+                                break;
+                            case 'initialized':
+                                console.log('Opus decoder worker initialized');
+                                break;
+                        }
+                    };
+
+                    this.worker.onerror = (error) => {
+                        this.showError('Worker error: ' + error.message);
+                    };
+
+                    // Initialize the worker
+                    this.worker.postMessage({ type: 'init' });
+                } catch (error) {
+                    this.showError('Failed to initialize audio worker: ' + error.message);
+                }
+            }
+
+            async connectToDevice() {
+                if (!navigator.bluetooth) {
+                    this.showError('Web Bluetooth is not supported in this browser');
+                    return;
+                }
+
+                try {
+                    this.setConnectionStatus('connecting');
+                    this.elements.connectBtn.disabled = true;
+
+                    // Request device with audio service
+                    this.device = await navigator.bluetooth.requestDevice({
+                        filters: [{ namePrefix: 'Omi' }],
+                        optionalServices: [
+                            '19b10000-e8f2-537e-4f6c-d104768a1214'
+                        ]
+                    });
+
+                    console.log('Selected device:', this.device.name);
+
+                    // Connect to GATT server
+                    const server = await this.device.gatt.connect();
+                    console.log('Connected to GATT server');
+
+                    // Get available services
+                    const services = await server.getPrimaryServices();
+                    console.log('Available services:', services.map(s => s.uuid));
+
+                    // Find audio service and characteristic
+                    let audioService = '19b10000-e8f2-537e-4f6c-d104768a1214';
+                    let audioCharacteristic = '19b10001-e8f2-537e-4f6c-d104768a1214';
+
+                    for (const service of services) {
+                        try {
+                            const characteristics = await service.getCharacteristics();
+                            for (const char of characteristics) {
+                                // Look for characteristics that support notifications (audio data)
+                                if (char.properties.notify || char.properties.indicate) {
+                                    audioService = service;
+                                    audioCharacteristic = char;
+                                    break;
+                                }
+                            }
+                            if (audioCharacteristic) break;
+                        } catch (error) {
+                            console.log('Error accessing service:', service.uuid, error);
+                        }
                     }
-                    
-                    // Initialize Opus decoder (simulated - real implementation would use actual Opus decoder)
-                    this.initializeOpusDecoder();
-                    
-                    // Start notifications from BLE characteristic
+
+                    if (!audioCharacteristic) {
+                        throw new Error('No suitable audio characteristic found');
+                    }
+
+                    this.characteristic = audioCharacteristic;
+
+                    // Subscribe to notifications
                     await this.characteristic.startNotifications();
                     this.characteristic.addEventListener('characteristicvaluechanged', 
                         (event) => this.handleAudioData(event));
-                    
-                    this.isReceiving = true;
-                    this.startAudioBtn.disabled = true;
-                    this.stopAudioBtn.disabled = false;
-                    this.updateStatus('Receiving audio data...');
-                    
-                    // Start visualization
-                    this.startVisualization();
-                    
-                    // Send start command to Nordic UART device
-                    if (this.txCharacteristic) {
-                        const startCommand = new TextEncoder().encode('START_AUDIO');
-                        await this.txCharacteristic.writeValue(startCommand);
-                        this.log('Sent START_AUDIO command to device');
-                    }
-                    
-                    // Simulate receiving audio data for demo purposes (remove in production)
-                    this.simulateNordicUARTData();
-                    
+
+                    // Set up device disconnect handler
+                    this.device.addEventListener('gattserverdisconnected', () => {
+                        this.handleDisconnection();
+                    });
+
+                    this.isConnected = true;
+                    this.setConnectionStatus('connected');
+                    this.updateDeviceInfo();
+                    this.enableAudioControls();
+                    this.showSuccess('Successfully connected to ' + this.device.name);
+
                 } catch (error) {
-                    this.log(`Audio reception error: ${error.message}`);
+                    console.error('Connection failed:', error);
+                    this.showError('Failed to connect: ' + error.message);
+                    this.setConnectionStatus('disconnected');
+                } finally {
+                    this.elements.connectBtn.disabled = false;
                 }
             }
-            
-            initializeOpusDecoder() {
-                // In a real implementation, you would initialize the Opus decoder here
-                // For demo purposes, we'll simulate the decoder
-                this.log('Opus decoder initialized (simulated)');
+
+            async disconnectDevice() {
+                try {
+                    if (this.characteristic) {
+                        await this.characteristic.stopNotifications();
+                    }
+                    
+                    if (this.device && this.device.gatt.connected) {
+                        await this.device.gatt.disconnect();
+                    }
+
+                    this.handleDisconnection();
+                    this.showSuccess('Device disconnected successfully');
+                } catch (error) {
+                    console.error('Disconnection error:', error);
+                    this.showError('Error during disconnection: ' + error.message);
+                }
             }
-            
+
+            handleDisconnection() {
+                this.isConnected = false;
+                this.device = null;
+                this.characteristic = null;
+                this.setConnectionStatus('disconnected');
+                this.disableAudioControls();
+                this.pauseAudio();
+                this.hideDeviceInfo();
+                this.resetStats();
+            }
+
             handleAudioData(event) {
-                const data = event.target.value;
-                const receivedData = new Uint8Array(data.buffer);
-                
-                this.packetsReceived++;
-                this.packetsCounter.textContent = this.packetsReceived;
-                
-                this.log(`Received ${receivedData.length} bytes via Nordic UART`);
-                
-                // Check if this looks like Opus data (starts with Opus frame header)
-                if (this.isOpusData(receivedData)) {
-                    // Process as Opus audio data
-                    const decodedAudio = this.decodeOpusData(receivedData);
-                    if (decodedAudio) {
-                        this.playAudioData(decodedAudio);
-                    }
-                } else {
-                    // Process as raw audio data or other format
-                    this.log(`Data: ${Array.from(receivedData.slice(0, Math.min(10, receivedData.length))).map(b => b.toString(16).padStart(2, '0')).join(' ')}${receivedData.length > 10 ? '...' : ''}`);
-                    
-                    // Try to interpret as raw audio samples
-                    const audioSamples = this.processRawAudioData(receivedData);
-                    if (audioSamples) {
-                        this.playAudioData(audioSamples);
-                    }
+                const data = new Uint8Array(event.target.value.buffer);
+                const timestamp = performance.now();
+
+                // Update statistics
+                this.stats.packets++;
+                this.stats.bytes += data.length;
+                this.updateStats();
+
+                // Send to worker for decoding
+                if (this.worker) {
+                    this.worker.postMessage({
+                        type: 'decode',
+                        data: data,
+                        timestamp: timestamp
+                    });
                 }
             }
-            
-            isOpusData(data) {
-                // Simple Opus frame detection
-                // Opus frames typically start with specific patterns
-                if (data.length < 2) return false;
-                
-                // Check for common Opus frame headers
-                const firstByte = data[0];
-                return (firstByte & 0x80) !== 0; // TOC byte has config bit set
-            }
-            
-            processRawAudioData(data) {
-                // Convert received bytes to audio samples
-                // Assuming 16-bit signed integers (common for audio)
-                const samples = new Float32Array(Math.floor(data.length / 2));
-                
-                for (let i = 0; i < samples.length; i++) {
-                    // Convert 16-bit signed integer to float [-1, 1]
-                    const sample16 = (data[i * 2 + 1] << 8) | data[i * 2]; // Little endian
-                    const signedSample = sample16 > 32767 ? sample16 - 65536 : sample16;
-                    samples[i] = signedSample / 32768.0;
-                }
-                
-                return samples;
-            }
-            
-            decodeOpusData(opusData) {
-                // Simulated Opus decoding for mono audio
-                // In real implementation, use actual Opus decoder
-                const frameSize = this.frameSize;
-                
-                // Generate simulated decoded mono audio (sine wave for demo)
-                const decodedSamples = new Float32Array(frameSize);
-                const frequency = 440; // A4 note
-                
-                for (let i = 0; i < frameSize; i++) {
-                    decodedSamples[i] = Math.sin(2 * Math.PI * frequency * i / this.sampleRate) * 0.1;
-                }
-                
-                return decodedSamples;
-            }
-            
-            playAudioData(audioData) {
-                if (!this.audioContext || !this.isReceiving) return;
-                
-                const buffer = this.audioContext.createBuffer(
-                    this.channels, 
-                    this.frameSize, 
-                    this.sampleRate
-                );
-                
-                // Fill buffer with decoded mono audio data
-                const channelData = buffer.getChannelData(0); // Only one channel for mono
-                for (let i = 0; i < this.frameSize; i++) {
-                    channelData[i] = audioData[i];
-                }
-                
-                // Create and play audio source
-                const source = this.audioContext.createBufferSource();
-                source.buffer = buffer;
-                source.connect(this.gainNode);
-                source.start();
-            }
-            
-            simulateNordicUARTData() {
-                if (!this.isReceiving) return;
-                
-                // Simulate receiving Nordic UART audio packets
-                setTimeout(() => {
-                    if (this.isReceiving && this.characteristic) {
-                        // Create simulated Nordic UART packet (20 bytes typical)
-                        const simulatedPacket = new ArrayBuffer(this.maxPacketSize);
-                        const view = new Uint8Array(simulatedPacket);
-                        
-                        // Fill with simulated 16-bit audio samples
-                        for (let i = 0; i < view.length; i += 2) {
-                            const sample = Math.sin(2 * Math.PI * 440 * this.packetsReceived * 0.01) * 16384;
-                            const sample16 = Math.floor(sample) + 16384; // Convert to unsigned 16-bit
-                            view[i] = sample16 & 0xFF; // Low byte
-                            view[i + 1] = (sample16 >> 8) & 0xFF; // High byte
+
+            handleDecodedAudio(audioData) {
+                if (!this.isPlaying || !this.audioContext) return;
+
+                try {
+                    // Create audio buffer
+                    const audioBuffer = this.audioContext.createBuffer(
+                        audioData.channels || 2,
+                        audioData.samples.length / (audioData.channels || 2),
+                        audioData.sampleRate || 48000
+                    );
+
+                    // Fill buffer with decoded data
+                    if (audioData.channels === 1) {
+                        audioBuffer.getChannelData(0).set(audioData.samples);
+                    } else {
+                        for (let channel = 0; channel < audioData.channels; channel++) {
+                            const channelData = audioBuffer.getChannelData(channel);
+                            for (let i = 0; i < channelData.length; i++) {
+                                channelData[i] = audioData.samples[i * audioData.channels + channel];
+                            }
                         }
-                        
-                        const event = {
-                            target: { value: simulatedPacket }
-                        };
-                        this.handleAudioData(event);
-                        
-                        // Continue simulation
-                        this.simulateNordicUARTData();
                     }
-                }, 50); // 50ms intervals (20 packets per second)
+
+                    // Queue for playback
+                    this.audioQueue.push({
+                        buffer: audioBuffer,
+                        timestamp: audioData.timestamp || performance.now()
+                    });
+
+                    // Process audio queue
+                    this.processAudioQueue();
+
+                    // Update buffer health
+                    this.updateBufferHealth();
+
+                } catch (error) {
+                    console.error('Error processing decoded audio:', error);
+                }
             }
-            
-            startVisualization() {
-                const draw = () => {
-                    if (!this.isReceiving || !this.analyser) return;
+
+            processAudioQueue() {
+                const currentTime = this.audioContext.currentTime;
+                const maxQueueSize = 10; // Maximum number of buffered audio chunks
+
+                // Remove old audio chunks
+                while (this.audioQueue.length > maxQueueSize) {
+                    this.audioQueue.shift();
+                }
+
+                // Play queued audio
+                while (this.audioQueue.length > 0) {
+                    const audioItem = this.audioQueue.shift();
+                    const source = this.audioContext.createBufferSource();
+                    source.buffer = audioItem.buffer;
+                    source.connect(this.gainNode);
                     
-                    this.animationId = requestAnimationFrame(draw);
-                    
-                    this.analyser.getByteFrequencyData(this.visualizerData);
-                    
-                    const canvas = this.visualizer;
-                    const ctx = this.ctx;
-                    const width = canvas.width = canvas.offsetWidth;
-                    const height = canvas.height = canvas.offsetHeight;
-                    
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-                    ctx.fillRect(0, 0, width, height);
-                    
-                    const barWidth = width / this.visualizerData.length;
-                    
-                    for (let i = 0; i < this.visualizerData.length; i++) {
-                        const barHeight = (this.visualizerData[i] / 255) * height;
-                        const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
-                        gradient.addColorStop(0, '#4ECDC4');
-                        gradient.addColorStop(1, '#FF6B6B');
-                        
-                        ctx.fillStyle = gradient;
-                        ctx.fillRect(i * barWidth, height - barHeight, barWidth - 1, barHeight);
+                    // Schedule playback
+                    const playTime = Math.max(currentTime, currentTime + 0.1);
+                    source.start(playTime);
+
+                    // Calculate latency
+                    const latency = performance.now() - audioItem.timestamp;
+                    this.stats.latency = latency;
+                }
+            }
+
+            async playAudio() {
+                try {
+                    if (this.audioContext.state === 'suspended') {
+                        await this.audioContext.resume();
                     }
-                };
-                
-                draw();
+                    
+                    this.isPlaying = true;
+                    this.elements.playBtn.disabled = true;
+                    this.elements.pauseBtn.disabled = false;
+                    console.log('Audio playback started');
+                } catch (error) {
+                    this.showError('Failed to start audio playback: ' + error.message);
+                }
             }
-            
-            stopAudioReception() {
-                this.isReceiving = false;
+
+            pauseAudio() {
+                this.isPlaying = false;
+                this.elements.playBtn.disabled = false;
+                this.elements.pauseBtn.disabled = true;
                 
-                // Send stop command to Nordic UART device
-                if (this.txCharacteristic) {
-                    try {
-                        const stopCommand = new TextEncoder().encode('STOP_AUDIO');
-                        this.txCharacteristic.writeValue(stopCommand);
-                        this.log('Sent STOP_AUDIO command to device');
-                    } catch (e) {
-                        this.log(`Error sending stop command: ${e.message}`);
-                    }
-                }
-                
-                if (this.characteristic) {
-                    this.characteristic.stopNotifications();
-                }
-                
-                if (this.audioContext) {
-                    this.audioContext.close();
-                    this.audioContext = null;
-                }
-                
-                if (this.animationId) {
-                    cancelAnimationFrame(this.animationId);
-                }
-                
-                this.startAudioBtn.disabled = false;
-                this.stopAudioBtn.disabled = true;
-                this.updateStatus('Audio reception stopped');
+                // Clear audio queue
+                this.audioQueue = [];
+                console.log('Audio playback paused');
             }
-            
-            updateVolume(value) {
-                this.volumeValue.textContent = `${value}%`;
+
+            toggleMute() {
+                this.isMuted = !this.isMuted;
+                
                 if (this.gainNode) {
-                    this.gainNode.gain.value = value / 100;
+                    this.gainNode.gain.value = this.isMuted ? 0 : this.volume;
+                }
+
+                this.elements.muteBtn.innerHTML = this.isMuted ? 
+                    '<span>🔇</span> Unmute' : '<span>🔊</span> Mute';
+            }
+
+            setVolume(value) {
+                this.volume = value / 100;
+                this.elements.volumeLabel.textContent = value + '%';
+                
+                if (this.gainNode && !this.isMuted) {
+                    this.gainNode.gain.value = this.volume;
                 }
             }
+
+            setConnectionStatus(status) {
+                this.elements.connectionStatus.className = `status-indicator ${status}`;
+                this.elements.disconnectBtn.disabled = status !== 'connected';
+            }
+
+            enableAudioControls() {
+                this.elements.playBtn.disabled = false;
+                this.elements.muteBtn.disabled = false;
+                this.elements.volumeSlider.disabled = false;
+            }
+
+            disableAudioControls() {
+                this.elements.playBtn.disabled = true;
+                this.elements.pauseBtn.disabled = true;
+                this.elements.muteBtn.disabled = true;
+                this.elements.volumeSlider.disabled = true;
+            }
+
+            updateDeviceInfo() {
+                this.elements.deviceName.textContent = this.device.name || 'Unknown Device';
+                this.elements.serviceName.textContent = this.characteristic.service.uuid;
+                this.elements.signalStrength.textContent = 'Connected';
+                this.elements.deviceInfo.style.display = 'block';
+            }
+
+            hideDeviceInfo() {
+                this.elements.deviceInfo.style.display = 'none';
+            }
+
+            updateStats() {
+                this.elements.packetCount.textContent = this.stats.packets.toLocaleString();
+                this.elements.byteCount.textContent = this.formatBytes(this.stats.bytes);
+                this.elements.latencyValue.textContent = Math.round(this.stats.latency) + 'ms';
+            }
+
+            updateBufferHealth() {
+                const health = Math.min(100, (this.audioQueue.length / 5) * 100);
+                this.stats.bufferHealth = health;
+                this.elements.bufferHealth.textContent = Math.round(health) + '%';
+                this.elements.bufferFill.style.width = health + '%';
+            }
+
+            resetStats() {
+                this.stats = { packets: 0, bytes: 0, latency: 0, bufferHealth: 0 };
+                this.updateStats();
+                this.updateBufferHealth();
+            }
+
+            formatBytes(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+
+            showError(message) {
+                this.elements.connectionError.textContent = message;
+                this.elements.connectionError.style.display = 'block';
+                this.elements.connectionSuccess.style.display = 'none';
+                setTimeout(() => {
+                    this.elements.connectionError.style.display = 'none';
+                }, 5000);
+            }
+
+            showSuccess(message) {
+                this.elements.connectionSuccess.textContent = message;
+                this.elements.connectionSuccess.style.display = 'block';
+                this.elements.connectionError.style.display = 'none';
+                setTimeout(() => {
+                    this.elements.connectionSuccess.style.display = 'none';
+                }, 3000);
+            }
         }
-        
-        // Initialize the BLE Audio Receiver when page loads
+
+        // Initialize the application
         document.addEventListener('DOMContentLoaded', () => {
-            const receiver = new BLEAudioReceiver();
+            window.opusDecoder = new OpusBluetoothAudioDecoder();
+            
+            // Check for Web Bluetooth support
+            if (!navigator.bluetooth) {
+                document.querySelector('.app-container').innerHTML += `
+                    <div class="error-message" style="display: block; margin-top: 20px;">
+                        <strong>Web Bluetooth Not Supported</strong><br>
+                        This application requires Web Bluetooth API support. Please use Chrome, Edge, or another compatible browser.
+                    </div>
+                `;
+            }
         });
-        
-        // Check for Web Bluetooth support
-        if (!navigator.bluetooth) {
-            document.getElementById('status').textContent = 
-                'Status: Web Bluetooth not supported in this browser';
-        }
     </script>
 </body>
 </html>

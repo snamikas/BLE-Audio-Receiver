@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLE Audio Receiver with Opus Codec</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .button {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-family: monospace;
+        }
+        
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .volume-slider {
+            width: 150px;
+            height: 5px;
+            border-radius: 5px;
+            background: rgba(255,255,255,0.3);
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4ECDC4;
+            cursor: pointer;
+        }
+        
+        .logs {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+        
+        .visualizer {
+            width: 100%;
+            height: 100px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .specs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .spec-item {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .spec-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #4ECDC4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Nordic UART Audio Receiver</h1>
+        
+        <div class="controls">
+            <button id="connectBtn" class="button">Connect to BLE Device</button>
+            <button id="startAudioBtn" class="button" disabled>Start Audio Reception</button>
+            <button id="stopAudioBtn" class="button" disabled>Stop Audio Reception</button>
+        </div>
+        
+        <div class="status" id="status">
+            Status: Ready to connect to Nordic UART device
+        </div>
+        
+        <div class="audio-controls">
+            <div class="volume-control">
+                <span>🔊 Volume:</span>
+                <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="50">
+                <span id="volumeValue">50%</span>
+            </div>
+        </div>
+        
+        <canvas id="visualizer" class="visualizer"></canvas>
+        
+        <div class="specs">
+            <div class="spec-item">
+                <div>Sample Rate</div>
+                <div class="spec-value" id="sampleRate">48000 Hz</div>
+            </div>
+            <div class="spec-item">
+                <div>Channels</div>
+                <div class="spec-value" id="channels">Mono</div>
+            </div>
+            <div class="spec-item">
+                <div>Latency</div>
+                <div class="spec-value" id="latency">0 ms</div>
+            </div>
+            <div class="spec-item">
+                <div>Packets Received</div>
+                <div class="spec-value" id="packetsReceived">0</div>
+            </div>
+        </div>
+        
+        <div class="logs" id="logs"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/opusjs/0.1.0/opus.min.js"></script>
+    <script>
+        class BLEAudioReceiver {
+            constructor() {
+                this.device = null;
+                this.server = null;
+                this.service = null;
+                this.characteristic = null;
+                this.audioContext = null;
+                this.opusDecoder = null;
+                this.audioBuffer = [];
+                this.isReceiving = false;
+                this.packetsReceived = 0;
+                this.gainNode = null;
+                this.analyser = null;
+                this.visualizerData = null;
+                this.animationId = null;
+                
+                // Nordic UART specific properties
+                this.maxPacketSize = 20; // Nordic UART typical MTU
+                
+                // Audio specifications - Mono channel
+                this.sampleRate = 48000;
+                this.channels = 1; // Mono audio
+                this.frameSize = 960; // 20ms at 48kHz
+                
+                this.initializeElements();
+                this.setupEventListeners();
+            }
+            
+            initializeElements() {
+                this.connectBtn = document.getElementById('connectBtn');
+                this.startAudioBtn = document.getElementById('startAudioBtn');
+                this.stopAudioBtn = document.getElementById('stopAudioBtn');
+                this.status = document.getElementById('status');
+                this.logs = document.getElementById('logs');
+                this.volumeSlider = document.getElementById('volumeSlider');
+                this.volumeValue = document.getElementById('volumeValue');
+                this.visualizer = document.getElementById('visualizer');
+                this.ctx = this.visualizer.getContext('2d');
+                this.packetsCounter = document.getElementById('packetsReceived');
+                this.latencyDisplay = document.getElementById('latency');
+            }
+            
+            setupEventListeners() {
+                this.connectBtn.addEventListener('click', () => this.connectToBLE());
+                this.startAudioBtn.addEventListener('click', () => this.startAudioReception());
+                this.stopAudioBtn.addEventListener('click', () => this.stopAudioReception());
+                this.volumeSlider.addEventListener('input', (e) => this.updateVolume(e.target.value));
+            }
+            
+            log(message) {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = `[${timestamp}] ${message}`;
+                console.log(logEntry);
+                this.logs.innerHTML += logEntry + '\n';
+                this.logs.scrollTop = this.logs.scrollHeight;
+            }
+            
+            updateStatus(message) {
+                this.status.textContent = `Status: ${message}`;
+                this.log(message);
+            }
+            
+            async connectToBLE() {
+                try {
+                    this.updateStatus('Requesting BLE device...');
+                    
+                    // Request BLE device with Nordic UART Service
+                    this.device = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: [
+                            '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
+                        ]
+                    });
+                    
+                    this.log(`Connected to device: ${this.device.name}`);
+                    
+                    // Connect to GATT server
+                    this.server = await this.device.gatt.connect();
+                    this.updateStatus('Connected to GATT server');
+                    
+                    // Get Nordic UART Service
+                    this.service = await this.server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+                    this.log('Nordic UART Service connected');
+                    
+                    // Get Nordic UART RX characteristic (for receiving data from device)
+                    this.characteristic = await this.service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
+                    this.log('Nordic UART RX characteristic found');
+                    
+                    // Also get TX characteristic for sending commands if needed
+                    try {
+                        this.txCharacteristic = await this.service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
+                        this.log('Nordic UART TX characteristic found');
+                    } catch (e) {
+                        this.log('Nordic UART TX characteristic not available');
+                    }
+                    
+                    this.connectBtn.disabled = true;
+                    this.startAudioBtn.disabled = false;
+                    this.updateStatus('Ready to receive audio');
+                    
+                } catch (error) {
+                    this.log(`Connection error: ${error.message}`);
+                    this.updateStatus('Connection failed');
+                }
+            }
+            
+            async initializeAudio() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: this.sampleRate
+                    });
+                    
+                    // Create gain node for volume control
+                    this.gainNode = this.audioContext.createGain();
+                    this.gainNode.gain.value = this.volumeSlider.value / 100;
+                    
+                    // Create analyser for visualization
+                    this.analyser = this.audioContext.createAnalyser();
+                    this.analyser.fftSize = 256;
+                    this.visualizerData = new Uint8Array(this.analyser.frequencyBinCount);
+                    
+                    // Connect audio graph
+                    this.gainNode.connect(this.analyser);
+                    this.analyser.connect(this.audioContext.destination);
+                    
+                    this.log('Audio context initialized');
+                    return true;
+                } catch (error) {
+                    this.log(`Audio initialization error: ${error.message}`);
+                    return false;
+                }
+            }
+            
+            async startAudioReception() {
+                try {
+                    if (!await this.initializeAudio()) {
+                        return;
+                    }
+                    
+                    // Initialize Opus decoder (simulated - real implementation would use actual Opus decoder)
+                    this.initializeOpusDecoder();
+                    
+                    // Start notifications from BLE characteristic
+                    await this.characteristic.startNotifications();
+                    this.characteristic.addEventListener('characteristicvaluechanged', 
+                        (event) => this.handleAudioData(event));
+                    
+                    this.isReceiving = true;
+                    this.startAudioBtn.disabled = true;
+                    this.stopAudioBtn.disabled = false;
+                    this.updateStatus('Receiving audio data...');
+                    
+                    // Start visualization
+                    this.startVisualization();
+                    
+                    // Send start command to Nordic UART device
+                    if (this.txCharacteristic) {
+                        const startCommand = new TextEncoder().encode('START_AUDIO');
+                        await this.txCharacteristic.writeValue(startCommand);
+                        this.log('Sent START_AUDIO command to device');
+                    }
+                    
+                    // Simulate receiving audio data for demo purposes (remove in production)
+                    this.simulateNordicUARTData();
+                    
+                } catch (error) {
+                    this.log(`Audio reception error: ${error.message}`);
+                }
+            }
+            
+            initializeOpusDecoder() {
+                // In a real implementation, you would initialize the Opus decoder here
+                // For demo purposes, we'll simulate the decoder
+                this.log('Opus decoder initialized (simulated)');
+            }
+            
+            handleAudioData(event) {
+                const data = event.target.value;
+                const receivedData = new Uint8Array(data.buffer);
+                
+                this.packetsReceived++;
+                this.packetsCounter.textContent = this.packetsReceived;
+                
+                this.log(`Received ${receivedData.length} bytes via Nordic UART`);
+                
+                // Check if this looks like Opus data (starts with Opus frame header)
+                if (this.isOpusData(receivedData)) {
+                    // Process as Opus audio data
+                    const decodedAudio = this.decodeOpusData(receivedData);
+                    if (decodedAudio) {
+                        this.playAudioData(decodedAudio);
+                    }
+                } else {
+                    // Process as raw audio data or other format
+                    this.log(`Data: ${Array.from(receivedData.slice(0, Math.min(10, receivedData.length))).map(b => b.toString(16).padStart(2, '0')).join(' ')}${receivedData.length > 10 ? '...' : ''}`);
+                    
+                    // Try to interpret as raw audio samples
+                    const audioSamples = this.processRawAudioData(receivedData);
+                    if (audioSamples) {
+                        this.playAudioData(audioSamples);
+                    }
+                }
+            }
+            
+            isOpusData(data) {
+                // Simple Opus frame detection
+                // Opus frames typically start with specific patterns
+                if (data.length < 2) return false;
+                
+                // Check for common Opus frame headers
+                const firstByte = data[0];
+                return (firstByte & 0x80) !== 0; // TOC byte has config bit set
+            }
+            
+            processRawAudioData(data) {
+                // Convert received bytes to audio samples
+                // Assuming 16-bit signed integers (common for audio)
+                const samples = new Float32Array(Math.floor(data.length / 2));
+                
+                for (let i = 0; i < samples.length; i++) {
+                    // Convert 16-bit signed integer to float [-1, 1]
+                    const sample16 = (data[i * 2 + 1] << 8) | data[i * 2]; // Little endian
+                    const signedSample = sample16 > 32767 ? sample16 - 65536 : sample16;
+                    samples[i] = signedSample / 32768.0;
+                }
+                
+                return samples;
+            }
+            
+            decodeOpusData(opusData) {
+                // Simulated Opus decoding for mono audio
+                // In real implementation, use actual Opus decoder
+                const frameSize = this.frameSize;
+                
+                // Generate simulated decoded mono audio (sine wave for demo)
+                const decodedSamples = new Float32Array(frameSize);
+                const frequency = 440; // A4 note
+                
+                for (let i = 0; i < frameSize; i++) {
+                    decodedSamples[i] = Math.sin(2 * Math.PI * frequency * i / this.sampleRate) * 0.1;
+                }
+                
+                return decodedSamples;
+            }
+            
+            playAudioData(audioData) {
+                if (!this.audioContext || !this.isReceiving) return;
+                
+                const buffer = this.audioContext.createBuffer(
+                    this.channels, 
+                    this.frameSize, 
+                    this.sampleRate
+                );
+                
+                // Fill buffer with decoded mono audio data
+                const channelData = buffer.getChannelData(0); // Only one channel for mono
+                for (let i = 0; i < this.frameSize; i++) {
+                    channelData[i] = audioData[i];
+                }
+                
+                // Create and play audio source
+                const source = this.audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(this.gainNode);
+                source.start();
+            }
+            
+            simulateNordicUARTData() {
+                if (!this.isReceiving) return;
+                
+                // Simulate receiving Nordic UART audio packets
+                setTimeout(() => {
+                    if (this.isReceiving && this.characteristic) {
+                        // Create simulated Nordic UART packet (20 bytes typical)
+                        const simulatedPacket = new ArrayBuffer(this.maxPacketSize);
+                        const view = new Uint8Array(simulatedPacket);
+                        
+                        // Fill with simulated 16-bit audio samples
+                        for (let i = 0; i < view.length; i += 2) {
+                            const sample = Math.sin(2 * Math.PI * 440 * this.packetsReceived * 0.01) * 16384;
+                            const sample16 = Math.floor(sample) + 16384; // Convert to unsigned 16-bit
+                            view[i] = sample16 & 0xFF; // Low byte
+                            view[i + 1] = (sample16 >> 8) & 0xFF; // High byte
+                        }
+                        
+                        const event = {
+                            target: { value: simulatedPacket }
+                        };
+                        this.handleAudioData(event);
+                        
+                        // Continue simulation
+                        this.simulateNordicUARTData();
+                    }
+                }, 50); // 50ms intervals (20 packets per second)
+            }
+            
+            startVisualization() {
+                const draw = () => {
+                    if (!this.isReceiving || !this.analyser) return;
+                    
+                    this.animationId = requestAnimationFrame(draw);
+                    
+                    this.analyser.getByteFrequencyData(this.visualizerData);
+                    
+                    const canvas = this.visualizer;
+                    const ctx = this.ctx;
+                    const width = canvas.width = canvas.offsetWidth;
+                    const height = canvas.height = canvas.offsetHeight;
+                    
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                    ctx.fillRect(0, 0, width, height);
+                    
+                    const barWidth = width / this.visualizerData.length;
+                    
+                    for (let i = 0; i < this.visualizerData.length; i++) {
+                        const barHeight = (this.visualizerData[i] / 255) * height;
+                        const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
+                        gradient.addColorStop(0, '#4ECDC4');
+                        gradient.addColorStop(1, '#FF6B6B');
+                        
+                        ctx.fillStyle = gradient;
+                        ctx.fillRect(i * barWidth, height - barHeight, barWidth - 1, barHeight);
+                    }
+                };
+                
+                draw();
+            }
+            
+            stopAudioReception() {
+                this.isReceiving = false;
+                
+                // Send stop command to Nordic UART device
+                if (this.txCharacteristic) {
+                    try {
+                        const stopCommand = new TextEncoder().encode('STOP_AUDIO');
+                        this.txCharacteristic.writeValue(stopCommand);
+                        this.log('Sent STOP_AUDIO command to device');
+                    } catch (e) {
+                        this.log(`Error sending stop command: ${e.message}`);
+                    }
+                }
+                
+                if (this.characteristic) {
+                    this.characteristic.stopNotifications();
+                }
+                
+                if (this.audioContext) {
+                    this.audioContext.close();
+                    this.audioContext = null;
+                }
+                
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                }
+                
+                this.startAudioBtn.disabled = false;
+                this.stopAudioBtn.disabled = true;
+                this.updateStatus('Audio reception stopped');
+            }
+            
+            updateVolume(value) {
+                this.volumeValue.textContent = `${value}%`;
+                if (this.gainNode) {
+                    this.gainNode.gain.value = value / 100;
+                }
+            }
+        }
+        
+        // Initialize the BLE Audio Receiver when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const receiver = new BLEAudioReceiver();
+        });
+        
+        // Check for Web Bluetooth support
+        if (!navigator.bluetooth) {
+            document.getElementById('status').textContent = 
+                'Status: Web Bluetooth not supported in this browser';
+        }
+    </script>
+</body>
+</html>
